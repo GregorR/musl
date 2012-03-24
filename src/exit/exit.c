@@ -23,8 +23,10 @@ void exit(int code)
 	__fflush_on_exit();
 
 	/* Destructor s**t is kept separate from atexit to avoid bloat */
+#ifndef __MICROCOSM__ /* FIXME: these should work */
 	if (libc.fini) libc.fini();
 	if (libc.ldso_fini) libc.ldso_fini();
+#endif
 
 	_Exit(code);
 	for(;;);

@@ -3,16 +3,20 @@
 
 int __lockfile(FILE *f)
 {
+#ifndef __MICROCOSM__ /* FIXME: This ought to work */
 	int owner, tid = __pthread_self()->tid;
 	if (f->lock == tid)
 		return 0;
 	while ((owner = a_cas(&f->lock, 0, tid)))
 		__wait(&f->lock, &f->waiters, owner, 1);
 	return 1;
+#endif
 }
 
 void __unlockfile(FILE *f)
 {
+#ifndef __MICROCOSM__
 	a_store(&f->lock, 0);
 	if (f->waiters) __wake(&f->lock, 1, 1);
+#endif
 }
