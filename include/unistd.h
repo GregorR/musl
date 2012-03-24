@@ -145,8 +145,10 @@ int getdtablesize(void);
 #endif
 
 #ifdef _GNU_SOURCE
+#ifndef __MICROCOSM__
 int brk(void *);
 void *sbrk(intptr_t);
+#endif
 pid_t forkall(void);
 pid_t vfork(void);
 int vhangup(void);

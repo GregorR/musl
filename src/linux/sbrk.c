@@ -1,3 +1,4 @@
+#ifndef __MICROCOSM__
 #include <stdint.h>
 #include "syscall.h"
 
@@ -7,3 +8,4 @@ void *sbrk(intptr_t inc)
 	if (inc && syscall(SYS_brk, cur+inc) != cur+inc) return (void *)-1;
 	return (void *)cur;
 }
+#endif

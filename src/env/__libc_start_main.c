@@ -21,6 +21,10 @@ int __libc_start_main(
 	if (init) init(argc, argv, envp);
 
 	/* Pass control to to application */
+#ifndef __MICROCOSM__ /* FIXME: real exit causes issues due to incomplete (unimplemented) thread support */
 	exit(main(argc, argv, envp));
+#else
+        _Exit(main(argc, argv, envp));
+#endif
 	return 0;
 }

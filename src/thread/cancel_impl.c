@@ -1,5 +1,6 @@
 #include "pthread_impl.h"
 
+#ifndef __MICROCOSM__
 void __cancel()
 {
 	pthread_t self = __pthread_self();
@@ -75,14 +76,17 @@ static void init_cancellation()
 	sigfillset(&sa.sa_mask);
 	__libc_sigaction(SIGCANCEL, &sa, 0);
 }
+#endif
 
 int pthread_cancel(pthread_t t)
 {
+#ifndef __MICROCOSM__ /* FIXME */
 	static int init;
 	if (!init) {
 		init_cancellation();
 		init = 1;
 	}
 	a_store(&t->cancel, 1);
+#endif
 	return pthread_kill(t, SIGCANCEL);
 }

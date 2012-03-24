@@ -45,7 +45,7 @@ LDSO_PATHNAME = $(syslibdir)/ld-musl-$(ARCH).so.1
 
 all: $(ALL_LIBS) $(ALL_TOOLS)
 
-install: $(ALL_LIBS:lib/%=$(DESTDIR)$(libdir)/%) $(ALL_INCLUDES:include/%=$(DESTDIR)$(includedir)/%) $(ALL_TOOLS:tools/%=$(DESTDIR)$(bindir)/%) $(if $(SHARED_LIBS),$(DESTDIR)$(LDSO_PATHNAME),)
+install: $(ALL_LIBS:lib/%=$(DESTDIR)$(libdir)/%) $(ALL_INCLUDES:include/%=$(DESTDIR)$(includedir)/%)
 
 clean:
 	rm -f crt/*.o
@@ -78,7 +78,7 @@ include/bits/alltypes.h: include/bits/alltypes.h.sh
 	$(CC) $(CFLAGS) $(INC) $(PIC) -c -o $@ $<
 
 lib/libc.so: $(LOBJS)
-	$(CC) $(LDFLAGS) -Wl,-soname=libc.so -o $@ $(LOBJS) -lgcc
+	$(CC) $(LDFLAGS) -Wl,-soname=libc.so -o $@ $(LOBJS) -lgcc -lmicrocosm
 	$(OBJCOPY) --weaken $@
 
 lib/libc.a: $(OBJS)

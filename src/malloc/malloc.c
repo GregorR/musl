@@ -1,3 +1,4 @@
+#ifndef __MICROCOSM__ /* use host malloc on microcosm */
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
@@ -519,3 +520,4 @@ void free(void *p)
 
 	unlock_bin(i);
 }
+#endif

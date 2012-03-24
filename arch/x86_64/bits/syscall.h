@@ -1,6 +1,7 @@
 #define __SYSCALL_LL_E(x) (x)
 #define __SYSCALL_LL_O(x) (x)
 
+#ifndef __MICROCOSM__
 static inline long __syscall0(long __n)
 {
 	unsigned long __ret;
@@ -60,6 +61,7 @@ static inline long __syscall6(long __n, long __a1, long __a2, long __a3, long __
 						  "d"(__a3), "r"(__r10), "r"(__r8), "r"(__r9) : "rcx", "r11", "memory");
 	return __ret;
 }
+#endif
 
 #define __socketcall(nm,a,b,c,d,e,f) syscall(__NR_##nm, a, b, c, d, e, f)
 #define __socketcall_cp(nm,a,b,c,d,e,f) syscall_cp(__NR_##nm, a, b, c, d, e, f)
