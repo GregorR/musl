@@ -8,7 +8,9 @@ weak_alias(dummy, __pthread_tsd_main);
 
 static int init_main_thread()
 {
+#ifndef __MICROCOSM__ /* FIXME: more thread hell :( */
 	if (__set_thread_area(&main_thread) < 0) return -1;
+#endif
 	main_thread.canceldisable = libc.canceldisable;
 	main_thread.tsd = (void **)__pthread_tsd_main;
 	main_thread.errno_ptr = __errno_location();
