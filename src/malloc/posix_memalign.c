@@ -1,3 +1,4 @@
+#ifndef __MICROCOSM__
 #include <stdlib.h>
 #include <stdint.h>
 #include <errno.h>
@@ -45,3 +46,4 @@ int posix_memalign(void **res, size_t align, size_t len)
 	*res = new;
 	return 0;
 }
+#endif
