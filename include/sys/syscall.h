@@ -20,6 +20,7 @@ long syscall(long, ...);
 
 #else
 /* Can't use __syscall[n] (they syscall directly), but need the macro to get (long) conversion */
+#define __syscall0(n) __syscall(n)
 #define __syscall1(n,a) __syscall(n,(long)(a))
 #define __syscall2(n,a,b) __syscall(n,(long)(a),(long)(b))
 #define __syscall3(n,a,b,c) __syscall(n,(long)(a),(long)(b),(long)(c))
