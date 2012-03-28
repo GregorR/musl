@@ -17,6 +17,16 @@ long syscall(long, ...);
 #define __syscall4(n,a,b,c,d) __syscall4(n,(long)(a),(long)(b),(long)(c),(long)(d))
 #define __syscall5(n,a,b,c,d,e) __syscall5(n,(long)(a),(long)(b),(long)(c),(long)(d),(long)(e))
 #define __syscall6(n,a,b,c,d,e,f) __syscall6(n,(long)(a),(long)(b),(long)(c),(long)(d),(long)(e),(long)(f))
+
+#else
+/* Can't use __syscall[n] (they syscall directly), but need the macro to get (long) conversion */
+#define __syscall1(n,a) __syscall(n,(long)(a))
+#define __syscall2(n,a,b) __syscall(n,(long)(a),(long)(b))
+#define __syscall3(n,a,b,c) __syscall(n,(long)(a),(long)(b),(long)(c))
+#define __syscall4(n,a,b,c,d) __syscall(n,(long)(a),(long)(b),(long)(c),(long)(d))
+#define __syscall5(n,a,b,c,d,e) __syscall(n,(long)(a),(long)(b),(long)(c),(long)(d),(long)(e))
+#define __syscall6(n,a,b,c,d,e,f) __syscall(n,(long)(a),(long)(b),(long)(c),(long)(d),(long)(e),(long)(f))
+
 #endif
 
 #define __SYSCALL_NARGS_X(a,b,c,d,e,f,g,n,...) n
@@ -25,9 +35,7 @@ long syscall(long, ...);
 #define __SYSCALL_CONCAT(a,b) __SYSCALL_CONCAT_X(a,b)
 #define __SYSCALL_DISP(b,...) __SYSCALL_CONCAT(b,__SYSCALL_NARGS(__VA_ARGS__))(__VA_ARGS__)
 
-#ifndef __MICROCOSM__
 #define __syscall(...) __SYSCALL_DISP(__syscall,__VA_ARGS__)
-#endif
 #define syscall(...) __syscall_ret(__syscall(__VA_ARGS__))
 
 #ifdef __cplusplus
