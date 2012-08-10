@@ -144,7 +144,6 @@ void encrypt(char *, int);
 void swab(const void *, void *, ssize_t);
 #endif
 
-#ifdef _GNU_SOURCE
 #if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
 #define L_SET 0
 #define L_INCR 1

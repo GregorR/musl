@@ -1,9 +1,9 @@
 #define __SYSCALL_LL_E(x) (x)
 #define __SYSCALL_LL_O(x) (x)
 
-#ifndef __MICROCOSM__
 #define __SYSCALL_SSLEN 8
 
+#ifndef __MICROCOSM__
 static inline long __syscall0(long __n)
 {
 	unsigned long __ret;
