@@ -10,7 +10,8 @@ extern "C" {
 #define __NEED_size_t
 
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
- || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE)
+ || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) \
+ || defined(_BSD_SOURCE)
 #define __NEED_ssize_t
 #define __NEED_off_t
 #endif
@@ -120,7 +121,8 @@ char *tmpnam(char *);
 FILE *tmpfile(void);
 
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
- || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE)
+ || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) \
+ || defined(_BSD_SOURCE)
 FILE *fmemopen(void *, size_t, const char *);
 FILE *open_memstream(char **, size_t *);
 FILE *fdopen(int, const char *);
@@ -146,25 +148,47 @@ char *ctermid(char *);
 #endif
 
 
-#if defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE)
+#if defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) \
+ || defined(_BSD_SOURCE)
 #define P_tmpdir "/tmp"
 char *tempnam(const char *, const char *);
 #endif
 
-#if defined(_GNU_SOURCE)
+#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
 #define L_cuserid 20
 char *cuserid(char *);
-#undef off64_t
-#define off64_t off_t
-int asprintf(char **, const char *, ...);
-int vasprintf(char **, const char *, va_list);
 void setlinebuf(FILE *);
 void setbuffer(FILE *, char *, size_t);
-int fpurge(FILE *);
 int fgetc_unlocked(FILE *);
 int fputc_unlocked(int, FILE *);
+int fflush_unlocked(FILE *);
+size_t fread_unlocked(void *, size_t, size_t, FILE *);
+size_t fwrite_unlocked(const void *, size_t, size_t, FILE *);
+void clearerr_unlocked(FILE *);
+int feof_unlocked(FILE *);
+int ferror_unlocked(FILE *);
+int fileno_unlocked(FILE *);
+int getw(FILE *);
+int putw(int, FILE *);
+#endif
+
+#ifdef _GNU_SOURCE
+int asprintf(char **, const char *, ...);
+int vasprintf(char **, const char *, va_list);
 char *fgets_unlocked(char *, int, FILE *);
 int fputs_unlocked(const char *, FILE *);
+#endif
+
+#if defined(_LARGEFILE64_SOURCE) || defined(_GNU_SOURCE)
+#define tmpfile64 tmpfile
+#define fopen64 fopen
+#define freopen64 freopen
+#define fseeko64 fseeko
+#define ftello64 ftello
+#define fgetpos64 fgetpos
+#define fsetpos64 fsetpos
+#define fpos64_t fpos_t
+#define off64_t off_t
 #endif
 
 #ifdef __cplusplus

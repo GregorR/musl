@@ -58,7 +58,7 @@ typedef __uint16_t u_int16_t;
 typedef __uint32_t u_int32_t;
 typedef __uint64_t u_int64_t;
 
-#ifdef _GNU_SOURCE
+#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
 typedef char *caddr_t;
 typedef unsigned char u_char;
 typedef unsigned short u_short, ushort;
@@ -70,6 +70,15 @@ typedef long register_t;
 #include <endian.h>
 #include <sys/select.h>
 #include <sys/sysmacros.h>
+#endif
+
+#if defined(_LARGEFILE64_SOURCE) || defined(_GNU_SOURCE)
+#define blksize64_t blksize_t
+#define blkcnt64_t blkcnt_t
+#define fsblkcnt64_t fsblkcnt_t
+#define fsfilcnt64_t fsfilcnt_t
+#define ino64_t ino_t
+#define off64_t off_t
 #endif
 
 #ifdef __cplusplus

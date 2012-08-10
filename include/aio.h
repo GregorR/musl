@@ -5,9 +5,6 @@
 extern "C" {
 #endif
 
-#if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
- || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE)
-
 #include <signal.h>
 #include <time.h>
 
@@ -51,6 +48,17 @@ int aio_fsync(int, struct aiocb *);
 
 int lio_listio(int, struct aiocb *const [], int, struct sigevent *);
 
+#if defined(_LARGEFILE64_SOURCE) || defined(_GNU_SOURCE)
+#define aiocb64 aiocb
+#define aio_read64 aio_read
+#define aio_write64 aio_write
+#define aio_error64 aio_error
+#define aio_return64 aio_return
+#define aio_cancel64 aio_cancel
+#define aio_suspend64 aio_suspend
+#define aio_fsync64 aio_fsync
+#define lio_listio64 lio_listio
+#define off64_t off_t
 #endif
 
 #ifdef __cplusplus

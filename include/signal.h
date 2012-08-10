@@ -6,7 +6,8 @@ extern "C" {
 #endif
 
 #if defined(_POSIX_SOURCE) || defined(_POSIX_C_SOURCE) \
- || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE)
+ || defined(_XOPEN_SOURCE) || defined(_GNU_SOURCE) \
+ || defined(_BSD_SOURCE)
 
 #ifdef _GNU_SOURCE
 #define __siginfo siginfo
@@ -80,7 +81,7 @@ struct sigaction {
 	} __sa_handler;
 	sigset_t sa_mask;
 	int sa_flags;
-	void (*__sa_restorer)(void);	
+	void (*sa_restorer)(void);	
 };
 #define sa_handler   __sa_handler.sa_handler
 #define sa_sigaction __sa_handler.sa_sigaction
@@ -202,6 +203,10 @@ void (*sigset(int, void (*)(int)))(int);
 #define SS_DISABLE    2
 #define MINSIGSTKSZ 2048
 #define SIGSTKSZ 8192
+#endif
+
+#ifdef _BSD_SOURCE
+typedef void (*sig_t)(int);
 #endif
 
 #ifdef _GNU_SOURCE

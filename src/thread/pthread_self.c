@@ -8,6 +8,8 @@ weak_alias(dummy, __pthread_tsd_main);
 
 static int init_main_thread()
 {
+	__syscall(SYS_rt_sigprocmask, SIG_UNBLOCK,
+		SIGPT_SET, 0, __SYSCALL_SSLEN);
 #ifndef __MICROCOSM__ /* FIXME: more thread hell :( */
 	if (__set_thread_area(&main_thread) < 0) return -1;
 #endif

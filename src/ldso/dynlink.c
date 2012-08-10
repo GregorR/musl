@@ -18,10 +18,9 @@
 #include <dlfcn.h>
 
 static int errflag;
+static char errbuf[128];
 
-#ifdef __PIC__
-
-#include "reloc.h"
+#ifdef SHARED
 
 #if ULONG_MAX == 0xffffffff
 typedef Elf32_Ehdr Ehdr;
@@ -37,33 +36,51 @@ typedef Elf64_Sym Sym;
 #define R_SYM(x) ((x)>>32)
 #endif
 
-struct dso
-{
-	struct dso *next, *prev;
-	int refcnt;
+struct debug {
+	int ver;
+	void *head;
+	void (*bp)(void);
+	int state;
+	void *base;
+};
+
+struct dso {
+	unsigned char *base;
+	char *name;
 	size_t *dynv;
+	struct dso *next, *prev;
+
+	int refcnt;
 	Sym *syms;
 	uint32_t *hashtab;
 	char *strings;
-	unsigned char *base;
 	unsigned char *map;
 	size_t map_len;
 	dev_t dev;
 	ino_t ino;
-	char global;
+	signed char global;
 	char relocated;
 	char constructed;
 	struct dso **deps;
-	char *name;
+	char *shortname;
 	char buf[];
 };
+
+#include "reloc.h"
+
+void __init_ssp(size_t *);
 
 static struct dso *head, *tail, *libc;
 static char *env_path, *sys_path, *r_path;
 static int rtld_used;
+static int ssp_used;
 static int runtime;
+static int ldd_mode;
 static jmp_buf rtld_fail;
 static pthread_rwlock_t lock;
+static struct debug debug;
+
+struct debug *_dl_debug_addr = &debug;
 
 #define AUX_CNT 24
 #define DYN_CNT 34
@@ -88,9 +105,12 @@ static uint32_t hash(const char *s0)
 	return h & 0xfffffff;
 }
 
-static Sym *lookup(const char *s, uint32_t h, Sym *syms, uint32_t *hashtab, char *strings)
+static Sym *lookup(const char *s, uint32_t h, struct dso *dso)
 {
 	size_t i;
+	Sym *syms = dso->syms;
+	uint32_t *hashtab = dso->hashtab;
+	char *strings = dso->strings;
 	for (i=hashtab[2+h%hashtab[0]]; i; i=hashtab[2+hashtab[0]+i]) {
 		if (!strcmp(s, strings+syms[i].st_name))
 			return syms+i;
@@ -107,10 +127,11 @@ static void *find_sym(struct dso *dso, const char *s, int need_def)
 	void *def = 0;
 	if (h==0x6b366be && !strcmp(s, "dlopen")) rtld_used = 1;
 	if (h==0x6b3afd && !strcmp(s, "dlsym")) rtld_used = 1;
+	if (h==0x595a4cc && !strcmp(s, "__stack_chk_fail")) ssp_used = 1;
 	for (; dso; dso=dso->next) {
 		Sym *sym;
 		if (!dso->global) continue;
-		sym = lookup(s, h, dso->syms, dso->hashtab, dso->strings);
+		sym = lookup(s, h, dso);
 		if (sym && (!need_def || sym->st_shndx) && sym->st_value
 		 && (1<<(sym->st_info&0xf) & OK_TYPES)
 		 && (1<<(sym->st_info>>4) & OK_BINDS)) {
@@ -122,8 +143,11 @@ static void *find_sym(struct dso *dso, const char *s, int need_def)
 	return def;
 }
 
-static void do_relocs(unsigned char *base, size_t *rel, size_t rel_size, size_t stride, Sym *syms, char *strings, struct dso *dso)
+static void do_relocs(struct dso *dso, size_t *rel, size_t rel_size, size_t stride)
 {
+	unsigned char *base = dso->base;
+	Sym *syms = dso->syms;
+	char *strings = dso->strings;
 	Sym *sym;
 	const char *name;
 	size_t sym_val, sym_size;
@@ -139,14 +163,19 @@ static void do_relocs(unsigned char *base, size_t *rel, size_t rel_size, size_t 
 		if (sym_index) {
 			sym = syms + sym_index;
 			name = strings + sym->st_name;
-			ctx = IS_COPY(type) ? dso->next : dso;
+			ctx = IS_COPY(type) ? head->next : head;
 			sym_val = (size_t)find_sym(ctx, name, IS_PLT(type));
 			if (!sym_val && sym->st_info>>4 != STB_WEAK) {
+				snprintf(errbuf, sizeof errbuf,
+					"Error relocating %s: %s: symbol not found",
+					dso->name, name);
 				if (runtime) longjmp(rtld_fail, 1);
-				dprintf(2, "%s: symbol not found\n", name);
+				dprintf(2, "%s\n", errbuf);
 				_exit(127);
 			}
 			sym_size = sym->st_size;
+		} else {
+			sym_val = sym_size = 0;
 		}
 		do_single_reloc(reloc_addr, type, sym_val, sym_size, base, rel[2]);
 	}
@@ -247,23 +276,20 @@ static void *map_library(int fd, size_t *lenp, unsigned char **basep, size_t *dy
 		prot = (((ph->p_flags&PF_R) ? PROT_READ : 0) |
 			((ph->p_flags&PF_W) ? PROT_WRITE: 0) |
 			((ph->p_flags&PF_X) ? PROT_EXEC : 0));
-		if (mmap(base+this_min, this_max-this_min, prot, MAP_PRIVATE|MAP_FIXED, fd, off_start) == MAP_FAILED) {
-			munmap(map, map_len);
-			return 0;
-		}
+		if (mmap(base+this_min, this_max-this_min, prot, MAP_PRIVATE|MAP_FIXED, fd, off_start) == MAP_FAILED)
+			goto error;
 		if (ph->p_memsz > ph->p_filesz) {
 			size_t brk = (size_t)base+ph->p_vaddr+ph->p_filesz;
 			size_t pgbrk = brk+PAGE_SIZE-1 & -PAGE_SIZE;
 			memset((void *)brk, 0, pgbrk-brk & PAGE_SIZE-1);
-			if (pgbrk-(size_t)base < this_max && mmap((void *)pgbrk, (size_t)base+this_max-pgbrk, prot, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) == MAP_FAILED) {
-				munmap(map, map_len);
-				return 0;
-			}
+			if (pgbrk-(size_t)base < this_max && mmap((void *)pgbrk, (size_t)base+this_max-pgbrk, prot, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) == MAP_FAILED)
+				goto error;
 		}
 	}
 	for (i=0; ((size_t *)(base+dyn))[i]; i+=2)
 		if (((size_t *)(base+dyn))[i]==DT_TEXTREL) {
-			mprotect(map, map_len, PROT_READ|PROT_WRITE|PROT_EXEC);
+			if (mprotect(map, map_len, PROT_READ|PROT_WRITE|PROT_EXEC) < 0)
+				goto error;
 			break;
 		}
 	if (!runtime) reclaim_gaps(base, (void *)((char *)buf + eh->e_phoff),
@@ -272,11 +298,13 @@ static void *map_library(int fd, size_t *lenp, unsigned char **basep, size_t *dy
 	*basep = base;
 	*dynp = dyn;
 	return map;
+error:
+	munmap(map, map_len);
+	return 0;
 }
 
-static int path_open(const char *name, const char *search)
+static int path_open(const char *name, const char *search, char *buf, size_t buf_size)
 {
-	char buf[2*NAME_MAX+2];
 	const char *s=search, *z;
 	int l, fd;
 	for (;;) {
@@ -284,7 +312,7 @@ static int path_open(const char *name, const char *search)
 		if (!*s) return -1;
 		z = strchr(s, ':');
 		l = z ? z-s : strlen(s);
-		snprintf(buf, sizeof buf, "%.*s/%s", l, s, name);
+		snprintf(buf, buf_size, "%.*s/%s", l, s, name);
 		if ((fd = open(buf, O_RDONLY))>=0) return fd;
 		s += l;
 	}
@@ -301,6 +329,8 @@ static void decode_dyn(struct dso *p)
 
 static struct dso *load_library(const char *name)
 {
+	char buf[2*NAME_MAX+2];
+	const char *pathname;
 	unsigned char *base, *map;
 	size_t dyno, map_len;
 	struct dso *p;
@@ -325,20 +355,21 @@ static struct dso *load_library(const char *name)
 			}
 		}
 	}
-	/* Search for the name to see if it's already loaded */
-	for (p=head->next; p; p=p->next) {
-		if (!strcmp(p->name, name)) {
-			p->refcnt++;
-			return p;
-		}
-	}
 	if (strchr(name, '/')) {
+		pathname = name;
 		fd = open(name, O_RDONLY);
 	} else {
+		/* Search for the name to see if it's already loaded */
+		for (p=head->next; p; p=p->next) {
+			if (p->shortname && !strcmp(p->shortname, name)) {
+				p->refcnt++;
+				return p;
+			}
+		}
 		if (strlen(name) > NAME_MAX) return 0;
 		fd = -1;
-		if (r_path) fd = path_open(name, r_path);
-		if (fd < 0 && env_path) fd = path_open(name, env_path);
+		if (r_path) fd = path_open(name, r_path, buf, sizeof buf);
+		if (fd < 0 && env_path) fd = path_open(name, env_path, buf, sizeof buf);
 		if (fd < 0) {
 			if (!sys_path) {
 				FILE *f = fopen(ETC_LDSO_PATH, "r");
@@ -348,9 +379,10 @@ static struct dso *load_library(const char *name)
 					fclose(f);
 				}
 			}
-			if (sys_path) fd = path_open(name, sys_path);
-			else fd = path_open(name, "/lib:/usr/local/lib:/usr/lib");
+			if (sys_path) fd = path_open(name, sys_path, buf, sizeof buf);
+			else fd = path_open(name, "/lib:/usr/local/lib:/usr/lib", buf, sizeof buf);
 		}
+		pathname = buf;
 	}
 	if (fd < 0) return 0;
 	if (fstat(fd, &st) < 0) {
@@ -359,6 +391,10 @@ static struct dso *load_library(const char *name)
 	}
 	for (p=head->next; p; p=p->next) {
 		if (p->dev == st.st_dev && p->ino == st.st_ino) {
+			/* If this library was previously loaded with a
+			 * pathname but a search found the same inode,
+			 * setup its shortname so it can be found by name. */
+			if (!p->shortname) p->shortname = strrchr(p->name, '/')+1;
 			close(fd);
 			p->refcnt++;
 			return p;
@@ -367,7 +403,7 @@ static struct dso *load_library(const char *name)
 	map = map_library(fd, &map_len, &base, &dyno);
 	close(fd);
 	if (!map) return 0;
-	p = calloc(1, sizeof *p + strlen(name) + 1);
+	p = calloc(1, sizeof *p + strlen(pathname) + 1);
 	if (!p) {
 		munmap(map, map_len);
 		return 0;
@@ -383,11 +419,15 @@ static struct dso *load_library(const char *name)
 	p->ino = st.st_ino;
 	p->refcnt = 1;
 	p->name = p->buf;
-	strcpy(p->name, name);
+	strcpy(p->name, pathname);
+	/* Add a shortname only if name arg was not an explicit pathname. */
+	if (pathname != name) p->shortname = strrchr(p->name, '/')+1;
 
 	tail->next = p;
 	p->prev = tail;
 	tail = p;
+
+	if (ldd_mode) dprintf(1, "\t%s => %s (%p)\n", name, pathname, base);
 
 	return p;
 }
@@ -405,9 +445,11 @@ static void load_deps(struct dso *p)
 			if (p->dynv[i] != DT_NEEDED) continue;
 			dep = load_library(p->strings + p->dynv[i+1]);
 			if (!dep) {
-				if (runtime) longjmp(rtld_fail, 1);
-				dprintf(2, "%s: %m (needed by %s)\n",
+				snprintf(errbuf, sizeof errbuf,
+					"Error loading shared library %s: %m (needed by %s)",
 					p->strings + p->dynv[i+1], p->name);
+				if (runtime) longjmp(rtld_fail, 1);
+				dprintf(2, "%s\n", errbuf);
 				_exit(127);
 			}
 			if (runtime) {
@@ -447,12 +489,13 @@ static void reloc_all(struct dso *p)
 	for (; p; p=p->next) {
 		if (p->relocated) continue;
 		decode_vec(p->dynv, dyn, DYN_CNT);
-		do_relocs(p->base, (void *)(p->base+dyn[DT_JMPREL]), dyn[DT_PLTRELSZ],
-			2+(dyn[DT_PLTREL]==DT_RELA), p->syms, p->strings, head);
-		do_relocs(p->base, (void *)(p->base+dyn[DT_REL]), dyn[DT_RELSZ],
-			2, p->syms, p->strings, head);
-		do_relocs(p->base, (void *)(p->base+dyn[DT_RELA]), dyn[DT_RELASZ],
-			3, p->syms, p->strings, head);
+#ifdef NEED_ARCH_RELOCS
+		do_arch_relocs(p, head);
+#endif
+		do_relocs(p, (void *)(p->base+dyn[DT_JMPREL]), dyn[DT_PLTRELSZ],
+			2+(dyn[DT_PLTREL]==DT_RELA));
+		do_relocs(p, (void *)(p->base+dyn[DT_REL]), dyn[DT_RELSZ], 2);
+		do_relocs(p, (void *)(p->base+dyn[DT_RELA]), dyn[DT_RELASZ], 3);
 		p->relocated = 1;
 	}
 }
@@ -489,6 +532,10 @@ static void do_init_fini(struct dso *p)
 	}
 }
 
+void _dl_debug_state(void)
+{
+}
+
 void *__dynlink(int argc, char **argv)
 {
 	size_t *auxv, aux[AUX_CNT] = {0};
@@ -518,10 +565,19 @@ void *__dynlink(int argc, char **argv)
 		env_preload = 0;
 	}
 
+	/* If the dynamic linker was invoked as a program itself, AT_BASE
+	 * will not be set. In that case, we assume the base address is
+	 * the start of the page containing the PHDRs; I don't know any
+	 * better approach... */
+	if (!aux[AT_BASE]) {
+		aux[AT_BASE] = aux[AT_PHDR] & -PAGE_SIZE;
+		aux[AT_PHDR] = aux[AT_PHENT] = aux[AT_PHNUM] = 0;
+	}
+
 	/* The dynamic linker load address is passed by the kernel
 	 * in the AUX vector, so this is easy. */
 	lib->base = (void *)aux[AT_BASE];
-	lib->name = "libc.so";
+	lib->name = lib->shortname = "libc.so";
 	lib->global = 1;
 	ehdr = (void *)lib->base;
 	lib->dynv = (void *)(lib->base + find_dyn(
@@ -529,18 +585,53 @@ void *__dynlink(int argc, char **argv)
 		ehdr->e_phnum, ehdr->e_phentsize));
 	decode_dyn(lib);
 
-	/* Find load address of the main program, via AT_PHDR vs PT_PHDR. */
-	app->base = 0;
-	phdr = (void *)aux[AT_PHDR];
-	for (i=aux[AT_PHNUM]; i; i--, phdr=(void *)((char *)phdr + aux[AT_PHENT])) {
-		if (phdr->p_type == PT_PHDR)
-			app->base = (void *)(aux[AT_PHDR] - phdr->p_vaddr);
+	if (aux[AT_PHDR]) {
+		size_t interp_off = 0;
+		/* Find load address of the main program, via AT_PHDR vs PT_PHDR. */
+		phdr = (void *)aux[AT_PHDR];
+		for (i=aux[AT_PHNUM]; i; i--, phdr=(void *)((char *)phdr + aux[AT_PHENT])) {
+			if (phdr->p_type == PT_PHDR)
+				app->base = (void *)(aux[AT_PHDR] - phdr->p_vaddr);
+			else if (phdr->p_type == PT_INTERP)
+				interp_off = (size_t)phdr->p_vaddr;
+		}
+		if (interp_off) lib->name = (char *)app->base + interp_off;
+		app->name = argv[0];
+		app->dynv = (void *)(app->base + find_dyn(
+			(void *)aux[AT_PHDR], aux[AT_PHNUM], aux[AT_PHENT]));
+	} else {
+		int fd;
+		char *ldname = argv[0];
+		size_t dyno, l = strlen(ldname);
+		if (l >= 3 && !strcmp(ldname+l-3, "ldd")) ldd_mode = 1;
+		*argv++ = (void *)-1;
+		if (argv[0] && !strcmp(argv[0], "--")) *argv++ = (void *)-1;
+		if (!argv[0]) {
+			dprintf(2, "musl libc/dynamic program loader\n");
+			dprintf(2, "usage: %s pathname%s\n", ldname,
+				ldd_mode ? "" : " [args]");
+			_exit(1);
+		}
+		fd = open(argv[0], O_RDONLY);
+		if (fd < 0) {
+			dprintf(2, "%s: cannot load %s: %s\n", ldname, argv[0], strerror(errno));
+			_exit(1);
+		}
+		runtime = 1;
+		ehdr = (void *)map_library(fd, &app->map_len, &app->base, &dyno);
+		if (!ehdr) {
+			dprintf(2, "%s: %s: Not a valid dynamic program\n", ldname, argv[0]);
+			_exit(1);
+		}
+		runtime = 0;
+		close(fd);
+		lib->name = ldname;
+		app->name = argv[0];
+		app->dynv = (void *)(app->base + dyno);
+		aux[AT_ENTRY] = ehdr->e_entry;
 	}
-	app->name = argv[0];
 	app->global = 1;
 	app->constructed = 1;
-	app->dynv = (void *)(app->base + find_dyn(
-		(void *)aux[AT_PHDR], aux[AT_PHNUM], aux[AT_PHENT]));
 	decode_dyn(app);
 
 	/* Attach to vdso, if provided by the kernel */
@@ -555,7 +646,7 @@ void *__dynlink(int argc, char **argv)
 			if (phdr->p_type == PT_LOAD)
 				vdso->base = (void *)(vdso_base - phdr->p_vaddr + phdr->p_offset);
 		}
-		vdso->name = "linux-gate.so.1";
+		vdso->name = vdso->shortname = "linux-gate.so.1";
 		vdso->global = 1;
 		decode_dyn(vdso);
 		vdso->prev = lib;
@@ -591,11 +682,27 @@ void *__dynlink(int argc, char **argv)
 	reloc_all(app->next);
 	reloc_all(app);
 
+	if (ldd_mode) _exit(0);
+
 	/* Switch to runtime mode: any further failures in the dynamic
 	 * linker are a reportable failure rather than a fatal startup
 	 * error. If the dynamic loader (dlopen) will not be used, free
 	 * all memory used by the dynamic linker. */
 	runtime = 1;
+
+#ifndef DYNAMIC_IS_RO
+	for (i=0; app->dynv[i]; i+=2)
+		if (app->dynv[i]==DT_DEBUG)
+			app->dynv[i+1] = (size_t)&debug;
+#endif
+	debug.ver = 1;
+	debug.bp = _dl_debug_state;
+	debug.head = head;
+	debug.base = lib->base;
+	debug.state = 0;
+	_dl_debug_state();
+
+	if (ssp_used) __init_ssp(auxv);
 
 	do_init_fini(tail);
 
@@ -634,9 +741,13 @@ void *dlopen(const char *file, int mode)
 		tail = orig_tail;
 		tail->next = 0;
 		p = 0;
+		errflag = 1;
+		goto end;
 	} else p = load_library(file);
 
 	if (!p) {
+		snprintf(errbuf, sizeof errbuf,
+			"Error loading shared library %s: %m", file);
 		errflag = 1;
 		goto end;
 	}
@@ -661,6 +772,8 @@ void *dlopen(const char *file, int mode)
 		p->global = 1;
 	}
 
+	_dl_debug_state();
+
 	do_init_fini(tail);
 end:
 	pthread_rwlock_unlock(&lock);
@@ -676,24 +789,27 @@ static void *do_dlsym(struct dso *p, const char *s, void *ra)
 	if (p == RTLD_NEXT) {
 		for (p=head; p && (unsigned char *)ra-p->map>p->map_len; p=p->next);
 		if (!p) p=head;
-		p=p->next;
+		void *res = find_sym(p->next, s, 0);
+		if (!res) goto failed;
+		return res;
 	}
 	if (p == head || p == RTLD_DEFAULT) {
 		void *res = find_sym(head, s, 0);
-		if (!res) errflag = 1;
+		if (!res) goto failed;
 		return res;
 	}
 	h = hash(s);
-	sym = lookup(s, h, p->syms, p->hashtab, p->strings);
+	sym = lookup(s, h, p);
 	if (sym && sym->st_value && (1<<(sym->st_info&0xf) & OK_TYPES))
 		return p->base + sym->st_value;
 	if (p->deps) for (i=0; p->deps[i]; i++) {
-		sym = lookup(s, h, p->deps[i]->syms,
-			p->deps[i]->hashtab, p->deps[i]->strings);
+		sym = lookup(s, h, p->deps[i]);
 		if (sym && sym->st_value && (1<<(sym->st_info&0xf) & OK_TYPES))
 			return p->deps[i]->base + sym->st_value;
 	}
+failed:
 	errflag = 1;
+	snprintf(errbuf, sizeof errbuf, "Symbol not found: %s", s);
 	return 0;
 }
 
@@ -720,7 +836,7 @@ char *dlerror()
 {
 	if (!errflag) return 0;
 	errflag = 0;
-	return "unknown error";
+	return errbuf;
 }
 
 int dlclose(void *p)

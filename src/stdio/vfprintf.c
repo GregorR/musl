@@ -73,6 +73,8 @@ static const unsigned char states[]['z'-'A'+1] = {
 	}, { /* 1: l-prefixed */
 		S('d') = LONG, S('i') = LONG,
 		S('o') = ULONG, S('u') = ULONG, S('x') = ULONG, S('X') = ULONG,
+		S('e') = DBL, S('f') = DBL, S('g') = DBL, S('a') = DBL,
+		S('E') = DBL, S('F') = DBL, S('G') = DBL, S('A') = DBL,
 		S('c') = INT, S('s') = PTR, S('n') = PTR,
 		S('l') = LLPRE,
 	}, { /* 2: ll-prefixed */
@@ -294,7 +296,7 @@ static int fmt_fp(FILE *f, long double y, int w, int p, int fl, int t)
 		e2-=sh;
 	}
 	while (e2<0) {
-		uint32_t carry=0, *z2;
+		uint32_t carry=0, *b;
 		int sh=MIN(9,-e2);
 		for (d=a; d<z; d++) {
 			uint32_t rm = *d & (1<<sh)-1;
@@ -304,8 +306,8 @@ static int fmt_fp(FILE *f, long double y, int w, int p, int fl, int t)
 		if (!*a) a++;
 		if (carry) *z++ = carry;
 		/* Avoid (slow!) computation past requested precision */
-		z2 = ((t|32)=='f' ? r : a) + 2 + p/9;
-		z = MIN(z, z2);
+		b = (t|32)=='f' ? r : a;
+		if (z-b > 2+p/9) z = b+2+p/9;
 		e2+=sh;
 	}
 
@@ -317,7 +319,7 @@ static int fmt_fp(FILE *f, long double y, int w, int p, int fl, int t)
 	if (j < 9*(z-r-1)) {
 		uint32_t x;
 		/* We avoid C's broken division of negative numbers */
-		d = r + 1 + (j+9*LDBL_MAX_EXP)/9 - LDBL_MAX_EXP;
+		d = r + 1 + ((j+9*LDBL_MAX_EXP)/9 - LDBL_MAX_EXP);
 		j += 9*LDBL_MAX_EXP;
 		j %= 9;
 		for (i=10, j++; j<9; i*=10, j++);
@@ -597,12 +599,12 @@ static int printf_core(FILE *f, const char *fmt, va_list *ap, union arg *nl_arg,
 			p = -1;
 		case 'S':
 			ws = arg.p;
-			for (i=0; *ws && (l=wctomb(mb, *ws++))>=0 && l<=0U+p-i; i+=l);
+			for (i=l=0; i<0U+p && *ws && (l=wctomb(mb, *ws++))>=0 && l<=0U+p-i; i+=l);
 			if (l<0) return -1;
 			p = i;
 			pad(f, ' ', w, p, fl);
 			ws = arg.p;
-			for (i=0; *ws && i+(l=wctomb(mb, *ws++))<=p; i+=l)
+			for (i=0; i<0U+p && *ws && i+(l=wctomb(mb, *ws++))<=p; i+=l)
 				out(f, mb, l);
 			pad(f, ' ', w, p, fl^LEFT_ADJ);
 			l = w>p ? w : p;
@@ -650,8 +652,9 @@ int vfprintf(FILE *f, const char *fmt, va_list ap)
 	FLOCK(f);
 	if (!f->buf_size) {
 		saved_buf = f->buf;
-		f->buf = internal_buf;
+		f->wpos = f->wbase = f->buf = internal_buf;
 		f->buf_size = sizeof internal_buf;
+		f->wend = internal_buf + sizeof internal_buf;
 	}
 	ret = printf_core(f, fmt, &ap2, nl_arg, nl_type);
 	if (saved_buf) {

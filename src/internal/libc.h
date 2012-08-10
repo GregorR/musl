@@ -15,9 +15,10 @@ struct __libc {
 	volatile int threads_minus_1;
 	int canceldisable;
 	FILE *ofl_head;
-	int ofl_lock;
+	int ofl_lock[2];
 };
 
+extern size_t __hwcap;
 
 #if !defined(__PIC__) || 100*__GNUC__+__GNUC_MINOR__ >= 303 || defined(__PCC__) || defined(__TINYC__)
 
@@ -45,13 +46,13 @@ extern struct __libc *__libc_loc(void) __attribute__((const));
 
 /* Designed to avoid any overhead in non-threaded processes */
 void __lock(volatile int *);
+void __unlock(volatile int *);
 int __lockfile(FILE *);
 void __unlockfile(FILE *);
 #define LOCK(x) (libc.threads_minus_1 ? (__lock(x),1) : ((void)(x),1))
-#define UNLOCK(x) (*(volatile int *)(x)=0)
+#define UNLOCK(x) (libc.threads_minus_1 ? (__unlock(x),1) : ((void)(x),1))
 
 void __synccall(void (*)(void *), void *);
-void __synccall_wait(void);
 int __setxid(int, int, int, int);
 
 extern char **__environ;
@@ -62,8 +63,7 @@ extern char **__environ;
 	extern __typeof(old) new __attribute__((weak, alias(#old)))
 
 #undef LFS64_2
-//#define LFS64_2(x, y) weak_alias(x, y)
-#define LFS64_2(x, y) extern __typeof(x) y
+#define LFS64_2(x, y) weak_alias(x, y)
 
 #undef LFS64
 #define LFS64(x) LFS64_2(x, x##64)

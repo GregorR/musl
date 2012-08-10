@@ -1,5 +1,5 @@
-#ifndef _SYS_SYSLOG_H
-#define _SYS_SYSLOG_H
+#ifndef _SYSLOG_H
+#define _SYSLOG_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -59,9 +59,12 @@ void openlog (const char *, int, int);
 int setlogmask (int);
 void syslog (int, const char *, ...);
 
-#if defined(_GNU_SOURCE) && defined(SYSLOG_NAMES)
+#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
+#define _PATH_LOG "/dev/log"
 #define __NEED_va_list
 #include <bits/alltypes.h>
+void vsyslog (int, const char *, va_list);
+#if defined(SYSLOG_NAMES)
 #define	INTERNAL_NOPRI 0x10
 #define	INTERNAL_MARK (LOG_NFACILITIES<<3)
 struct __CODE {
@@ -89,7 +92,7 @@ typedef struct {
 	{ "local2", LOG_LOCAL2 }, { "local3", LOG_LOCAL3 }, \
 	{ "local4", LOG_LOCAL4 }, { "local5", LOG_LOCAL5 }, \
 	{ "local6", LOG_LOCAL6 }, { "local7", LOG_LOCAL7 }, { NULL, -1 } })
-void vsyslog (int, const char *, va_list);
+#endif
 #endif
 
 #ifdef __cplusplus

@@ -3,6 +3,8 @@
 ((union { long long ll; long l[2]; }){ .ll = x }).l[1]
 #define __SYSCALL_LL_O(x) __SYSCALL_LL_E((x))
 
+#define __SYSCALL_SSLEN 8
+
 static inline long __syscall0(long __n)
 {
 	unsigned long __ret;
@@ -61,7 +63,7 @@ static inline long __syscall1(long __n, long __a1)
 {
 	unsigned long __ret;
 	__asm__ __volatile__ ("xchg %2,%%ebx ; int $128 ; xchg %2,%%ebx"
-		: "=a"(__ret) : "a"(__n), "r"(__a1) : "memory");
+		: "=a"(__ret) : "a"(__n), "d"(__a1) : "memory");
 	return __ret;
 }
 
@@ -69,7 +71,7 @@ static inline long __syscall2(long __n, long __a1, long __a2)
 {
 	unsigned long __ret;
 	__asm__ __volatile__ ("xchg %2,%%ebx ; int $128 ; xchg %2,%%ebx"
-		: "=a"(__ret) : "a"(__n), "r"(__a1), "c"(__a2) : "memory");
+		: "=a"(__ret) : "a"(__n), "d"(__a1), "c"(__a2) : "memory");
 	return __ret;
 }
 
@@ -77,7 +79,7 @@ static inline long __syscall3(long __n, long __a1, long __a2, long __a3)
 {
 	unsigned long __ret;
 	__asm__ __volatile__ ("xchg %2,%%ebx ; int $128 ; xchg %2,%%ebx"
-		: "=a"(__ret) : "a"(__n), "r"(__a1), "c"(__a2), "d"(__a3) : "memory");
+		: "=a"(__ret) : "a"(__n), "S"(__a1), "c"(__a2), "d"(__a3) : "memory");
 	return __ret;
 }
 
@@ -85,7 +87,7 @@ static inline long __syscall4(long __n, long __a1, long __a2, long __a3, long __
 {
 	unsigned long __ret;
 	__asm__ __volatile__ ("xchg %2,%%ebx ; int $128 ; xchg %2,%%ebx"
-		: "=a"(__ret) : "a"(__n), "r"(__a1), "c"(__a2), "d"(__a3), "S"(__a4) : "memory");
+		: "=a"(__ret) : "a"(__n), "D"(__a1), "c"(__a2), "d"(__a3), "S"(__a4) : "memory");
 	return __ret;
 }
 
@@ -471,6 +473,14 @@ static inline long __syscall6(long __n, long __a1, long __a2, long __a3, long __
 #define __NR_preadv		333
 #define __NR_pwritev		334
 #define __NR_prlimit64		340
+#define __NR_name_to_handle_at	341
+#define __NR_open_by_handle_at	342
+#define __NR_clock_adjtime	343
+#define __NR_syncfs		344
+#define __NR_sendmmsg		345
+#define __NR_setns		346
+#define __NR_process_vm_readv	347
+#define __NR_process_vm_writev	348
 
 /* fixup legacy 16-bit junk */
 #undef __NR_lchown
@@ -883,6 +893,14 @@ static inline long __syscall6(long __n, long __a1, long __a2, long __a3, long __
 #define SYS_preadv		333
 #define SYS_pwritev		334
 #define SYS_prlimit64		340
+#define SYS_name_to_handle_at	341
+#define SYS_open_by_handle_at	342
+#define SYS_clock_adjtime	343
+#define SYS_syncfs		344
+#define SYS_sendmmsg		345
+#define SYS_setns		346
+#define SYS_process_vm_readv	347
+#define SYS_process_vm_writev	348
 
 /* fixup legacy 16-bit junk */
 #undef SYS_lchown

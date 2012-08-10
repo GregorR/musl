@@ -961,6 +961,8 @@ tre_parse(tre_parse_ctx_t *ctx)
   tre_stack_t *stack = ctx->stack;
   int bottom = tre_stack_num_objects(stack);
   int depth = 0;
+  wchar_t wc;
+  int clen;
 
   if (!ctx->nofirstsub)
     {
@@ -1050,8 +1052,6 @@ tre_parse(tre_parse_ctx_t *ctx)
 	  }
 
 	case PARSE_UNION:
-	  if (!*ctx->re)
-	    break;
 	  switch (*ctx->re)
 	    {
 	    case CHAR_PIPE:
@@ -1084,8 +1084,6 @@ tre_parse(tre_parse_ctx_t *ctx)
 
 	case PARSE_POSTFIX:
 	  /* Parse postfix operators. */
-	  if (!*ctx->re)
-	    break;
 	  switch (*ctx->re)
 	    {
 	    case CHAR_PLUS:
@@ -1104,20 +1102,6 @@ tre_parse(tre_parse_ctx_t *ctx)
 		  rep_min = 1;
 		if (*ctx->re == CHAR_QUESTIONMARK)
 		  rep_max = 1;
-
-		  {
-		    if (*(ctx->re + 1) == CHAR_QUESTIONMARK)
-		      {
-			minimal = 1;
-			ctx->re++;
-		      }
-		    else if (*(ctx->re + 1) == CHAR_STAR
-			     || *(ctx->re + 1) == CHAR_PLUS)
-		      {
-			/* These are reserved for future extensions. */
-			return REG_BADRPT;
-		      }
-		  }
 
 		ctx->re++;
 		tmp_node = tre_ast_new_iter(ctx->mem, result, rep_min, rep_max,
@@ -1161,18 +1145,13 @@ tre_parse(tre_parse_ctx_t *ctx)
 	     an empty set of `()', a bracket expression, `.', `^', `$',
 	     a `\' followed by a character, or a single character. */
 
-	  /* End of regexp? (empty string). */
-	  if (!*ctx->re)
-	    goto parse_literal;
-
 	  switch (*ctx->re)
 	    {
 	    case CHAR_LPAREN:  /* parenthesized subexpression */
 
-	      if (ctx->cflags & REG_EXTENDED
-		  || (ctx->re > ctx->re_start
-		      && *(ctx->re - 1) == CHAR_BACKSLASH))
+	      if (ctx->cflags & REG_EXTENDED)
 		{
+		lparen:
 		  depth++;
 		    {
 		      ctx->re++;
@@ -1188,25 +1167,6 @@ tre_parse(tre_parse_ctx_t *ctx)
 		goto parse_literal;
 	      break;
 
-	    case CHAR_RPAREN:  /* end of current subexpression */
-	      if ((ctx->cflags & REG_EXTENDED && depth > 0)
-		  || (ctx->re > ctx->re_start
-		      && *(ctx->re - 1) == CHAR_BACKSLASH))
-		{
-		  /* We were expecting an atom, but instead the current
-		     subexpression was closed.	POSIX leaves the meaning of
-		     this to be implementation-defined.	 We interpret this as
-		     an empty expression (which matches an empty string).  */
-		  result = tre_ast_new_literal(ctx->mem, EMPTY, -1, -1);
-		  if (result == NULL)
-		    return REG_ESPACE;
-		  if (!(ctx->cflags & REG_EXTENDED))
-		    ctx->re--;
-		}
-	      else
-		goto parse_literal;
-	      break;
-
 	    case CHAR_LBRACKET: /* bracket expression */
 	      ctx->re++;
 	      status = tre_parse_bracket(ctx, &result);
@@ -1217,13 +1177,14 @@ tre_parse(tre_parse_ctx_t *ctx)
 	    case CHAR_BACKSLASH:
 	      /* If this is "\(" or "\)" chew off the backslash and
 		 try again. */
-	      if (!(ctx->cflags & REG_EXTENDED)
-		  && (*(ctx->re + 1) == CHAR_LPAREN
-		      || *(ctx->re + 1) == CHAR_RPAREN))
+	      if (!(ctx->cflags & REG_EXTENDED) && *(ctx->re + 1) == CHAR_LPAREN)
 		{
 		  ctx->re++;
-		  STACK_PUSHX(stack, int, PARSE_ATOM);
-		  break;
+		  goto lparen;
+		}
+	      if (!(ctx->cflags & REG_EXTENDED) && *(ctx->re + 1) == CHAR_RPAREN)
+		{
+		  goto empty_atom;
 		}
 
 	      /* If a macro is used, parse the expanded macro recursively. */
@@ -1245,7 +1206,7 @@ tre_parse(tre_parse_ctx_t *ctx)
 		  }
 	      }
 
-	      if (!*ctx->re)
+	      if (!ctx->re[1])
 		/* Trailing backslash. */
 		return REG_EESCAPE;
 
@@ -1383,14 +1344,13 @@ tre_parse(tre_parse_ctx_t *ctx)
 	      break;
 
 	    case CHAR_CARET:	 /* beginning of line assertion */
-	      /* '^' has a special meaning everywhere in EREs, and in the
-		 beginning of the RE and after \( is BREs. */
+	      /* '^' has a special meaning everywhere in EREs, and at
+		 beginning of BRE. */
 	      if (ctx->cflags & REG_EXTENDED
-		  || (ctx->re - 2 >= ctx->re_start
-		      && *(ctx->re - 2) == CHAR_BACKSLASH
-		      && *(ctx->re - 1) == CHAR_LPAREN)
 		  || ctx->re == ctx->re_start)
 		{
+		  if (!(ctx->cflags & REG_EXTENDED))
+		    STACK_PUSHX(stack, int, PARSE_CATENATION);
 		  result = tre_ast_new_literal(ctx->mem, ASSERTION,
 					       ASSERT_AT_BOL, -1);
 		  if (result == NULL)
@@ -1403,10 +1363,8 @@ tre_parse(tre_parse_ctx_t *ctx)
 
 	    case CHAR_DOLLAR:	 /* end of line assertion. */
 	      /* '$' is special everywhere in EREs, and in the end of the
-		 string and before \) is BREs. */
+		 string in BREs. */
 	      if (ctx->cflags & REG_EXTENDED
-		  || (*(ctx->re + 1) == CHAR_BACKSLASH
-		      && *(ctx->re + 2) == CHAR_RPAREN)
 		  || !*(ctx->re + 1))
 		{
 		  result = tre_ast_new_literal(ctx->mem, ASSERTION,
@@ -1419,34 +1377,28 @@ tre_parse(tre_parse_ctx_t *ctx)
 		goto parse_literal;
 	      break;
 
+	    case CHAR_RPAREN:
+	      if (!depth)
+	        goto parse_literal;
+	    case CHAR_STAR:
+	    case CHAR_PIPE:
+	    case CHAR_LBRACE:
+	    case CHAR_PLUS:
+	    case CHAR_QUESTIONMARK:
+	      if (!(ctx->cflags & REG_EXTENDED))
+	        goto parse_literal;
+
+	    case 0:
+	    empty_atom:
+	      result = tre_ast_new_literal(ctx->mem, EMPTY, -1, -1);
+	      if (!result)
+		return REG_ESPACE;
+	      break;
+
 	    default:
 	    parse_literal:
 
-	      /* We are expecting an atom.  If the subexpression (or the whole
-		 regexp ends here, we interpret it as an empty expression
-		 (which matches an empty string).  */
-	      if (
-		  (!*ctx->re
-		   || *ctx->re == CHAR_STAR
-		   || (ctx->cflags & REG_EXTENDED
-		       && (*ctx->re == CHAR_PIPE
-			   || *ctx->re == CHAR_LBRACE
-			   || *ctx->re == CHAR_PLUS
-			   || *ctx->re == CHAR_QUESTIONMARK))
-		   /* Test for "\)" in BRE mode. */
-		   || (!(ctx->cflags & REG_EXTENDED)
-		       && !*(ctx->re + 1)
-		       && *ctx->re == CHAR_BACKSLASH
-		       && *(ctx->re + 1) == CHAR_LBRACE)))
-		{
-		  result = tre_ast_new_literal(ctx->mem, EMPTY, -1, -1);
-		  if (!result)
-		    return REG_ESPACE;
-		  break;
-		}
-
-	      wchar_t wc;
-	      int clen = mbtowc(&wc, ctx->re, -1);
+	      clen = mbtowc(&wc, ctx->re, -1);
 	      if (clen<0) clen=1, wc=WEOF;
 
 	      /* Note that we can't use an tre_isalpha() test here, since there

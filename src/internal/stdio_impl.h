@@ -57,8 +57,10 @@ struct __FILE_s {
 	int waiters;
 	void *cookie;
 	off_t off;
-	int (*flush)(FILE *);
+	void *dummy4;
 	void *mustbezero_2;
+	unsigned char *shend;
+	off_t shlim, shcnt;
 };
 
 size_t __stdio_read(FILE *, unsigned char *, size_t);
@@ -66,6 +68,8 @@ size_t __stdio_write(FILE *, const unsigned char *, size_t);
 size_t __stdout_write(FILE *, const unsigned char *, size_t);
 off_t __stdio_seek(FILE *, off_t, int);
 int __stdio_close(FILE *);
+
+size_t __string_read(FILE *, unsigned char *, size_t);
 
 int __toread(FILE *);
 int __towrite(FILE *);
@@ -84,8 +88,8 @@ int __putc_unlocked(int, FILE *);
 
 FILE *__fdopen(int, const char *);
 
-#define OFLLOCK() LOCK(&libc.ofl_lock)
-#define OFLUNLOCK() UNLOCK(&libc.ofl_lock)
+#define OFLLOCK() LOCK(libc.ofl_lock)
+#define OFLUNLOCK() UNLOCK(libc.ofl_lock)
 
 #define feof(f) ((f)->flags & F_EOF)
 #define ferror(f) ((f)->flags & F_ERR)

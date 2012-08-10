@@ -18,7 +18,7 @@ union \1 \2;\
 
 TYPEDEF unsigned size_t;
 TYPEDEF int ssize_t;
-TYPEDEF long ptrdiff_t;
+TYPEDEF int ptrdiff_t;
 
 #if __GNUC__ >= 3
 TYPEDEF __builtin_va_list va_list;
@@ -37,10 +37,10 @@ TYPEDEF long wint_t;
 TYPEDEF long wctrans_t;
 TYPEDEF long wctype_t;
 
-TYPEDEF char      int8_t;
-TYPEDEF short     int16_t;
-TYPEDEF int       int32_t;
-TYPEDEF long long int64_t;
+TYPEDEF signed char int8_t;
+TYPEDEF short       int16_t;
+TYPEDEF int         int32_t;
+TYPEDEF long long   int64_t;
 
 TYPEDEF unsigned char      uint8_t;
 TYPEDEF unsigned short     uint16_t;
@@ -64,8 +64,13 @@ TYPEDEF uint64_t           uint_fast64_t;
 TYPEDEF long          intptr_t;
 TYPEDEF unsigned long uintptr_t;
 
+#if defined(__FLT_EVAL_METHOD__) && __FLT_EVAL_METHOD__ == 0
+TYPEDEF float float_t;
+TYPEDEF double double_t;
+#else
 TYPEDEF long double float_t;
 TYPEDEF long double double_t;
+#endif
 
 TYPEDEF long time_t;
 TYPEDEF int suseconds_t;

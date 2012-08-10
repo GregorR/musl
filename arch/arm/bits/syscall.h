@@ -3,36 +3,38 @@
 ((union { long long ll; long l[2]; }){ .ll = x }).l[1]
 #define __SYSCALL_LL_O(x) 0, __SYSCALL_LL_E((x))
 
+#define __SYSCALL_SSLEN 8
+
 long (__syscall)(long, ...);
 
 static inline long __syscall0(long n)
 {
-	return (__syscall)(n, 0, 0, 0, 0, 0, 0);
+	return (__syscall)(n);
 }
 
 static inline long __syscall1(long n, long a)
 {
-	return (__syscall)(n, a, 0, 0, 0, 0, 0);
+	return (__syscall)(n, a);
 }
 
 static inline long __syscall2(long n, long a, long b)
 {
-	return (__syscall)(n, a, b, 0, 0, 0, 0);
+	return (__syscall)(n, a, b);
 }
 
 static inline long __syscall3(long n, long a, long b, long c)
 {
-	return (__syscall)(n, a, b, c, 0, 0, 0);
+	return (__syscall)(n, a, b, c);
 }
 
 static inline long __syscall4(long n, long a, long b, long c, long d)
 {
-	return (__syscall)(n, a, b, c, d, 0, 0);
+	return (__syscall)(n, a, b, c, d);
 }
 
 static inline long __syscall5(long n, long a, long b, long c, long d, long e)
 {
-	return (__syscall)(n, a, b, c, d, e, 0);
+	return (__syscall)(n, a, b, c, d, e);
 }
 
 static inline long __syscall6(long n, long a, long b, long c, long d, long e, long f)
@@ -55,21 +57,16 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define __NR_unlink	10
 #define __NR_execve	11
 #define __NR_chdir	12
-#define __NR_time	13
 #define __NR_mknod	14
 #define __NR_chmod	15
 #define __NR_lchown	16
 #define __NR_lseek	19
 #define __NR_getpid	20
 #define __NR_mount	21
-#define __NR_umount	22
 #define __NR_setuid	23
 #define __NR_getuid	24
-#define __NR_stime	25
 #define __NR_ptrace	26
-#define __NR_alarm	27
 #define __NR_pause	29
-#define __NR_utime	30
 #define __NR_access	33
 #define __NR_nice	34
 #define __NR_sync	36
@@ -109,14 +106,11 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define __NR_settimeofday	79
 #define __NR_getgroups	80
 #define __NR_setgroups	81
-#define __NR_select	82
 #define __NR_symlink	83
 #define __NR_readlink	85
 #define __NR_uselib	86
 #define __NR_swapon	87
 #define __NR_reboot	88
-#define __NR_readdir	89
-#define __NR_mmap	90
 #define __NR_munmap	91
 #define __NR_truncate	92
 #define __NR_ftruncate	93
@@ -126,7 +120,6 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define __NR_setpriority	97
 #define __NR_statfs	99
 #define __NR_fstatfs	100
-#define __NR_socketcall	102
 #define __NR_syslog	103
 #define __NR_setitimer	104
 #define __NR_getitimer	105
@@ -134,11 +127,9 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define __NR_lstat	107
 #define __NR_fstat	108
 #define __NR_vhangup	111
-#define __NR_syscall	113
 #define __NR_wait4	114
 #define __NR_swapoff	115
 #define __NR_sysinfo	116
-#define __NR_ipc	117
 #define __NR_fsync	118
 #define __NR_sigreturn	119
 #define __NR_clone	120
@@ -385,6 +376,8 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define __NR_syncfs	373
 #define __NR_sendmmsg	374
 #define __NR_setns	375
+#define __NR_process_vm_readv	376
+#define __NR_process_vm_writev	377
 
 /* fixup legacy 16-bit junk */
 #undef __NR_lchown
@@ -473,21 +466,16 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define SYS_unlink	10
 #define SYS_execve	11
 #define SYS_chdir	12
-#define SYS_time	13
 #define SYS_mknod	14
 #define SYS_chmod	15
 #define SYS_lchown	16
 #define SYS_lseek	19
 #define SYS_getpid	20
 #define SYS_mount	21
-#define SYS_umount	22
 #define SYS_setuid	23
 #define SYS_getuid	24
-#define SYS_stime	25
 #define SYS_ptrace	26
-#define SYS_alarm	27
 #define SYS_pause	29
-#define SYS_utime	30
 #define SYS_access	33
 #define SYS_nice	34
 #define SYS_sync	36
@@ -527,14 +515,11 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define SYS_settimeofday	79
 #define SYS_getgroups	80
 #define SYS_setgroups	81
-#define SYS_select	82
 #define SYS_symlink	83
 #define SYS_readlink	85
 #define SYS_uselib	86
 #define SYS_swapon	87
 #define SYS_reboot	88
-#define SYS_readdir	89
-#define SYS_mmap	90
 #define SYS_munmap	91
 #define SYS_truncate	92
 #define SYS_ftruncate	93
@@ -544,7 +529,6 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define SYS_setpriority	97
 #define SYS_statfs	99
 #define SYS_fstatfs	100
-#define SYS_socketcall	102
 #define SYS_syslog	103
 #define SYS_setitimer	104
 #define SYS_getitimer	105
@@ -552,11 +536,9 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define SYS_lstat	107
 #define SYS_fstat	108
 #define SYS_vhangup	111
-#define SYS_syscall	113
 #define SYS_wait4	114
 #define SYS_swapoff	115
 #define SYS_sysinfo	116
-#define SYS_ipc	117
 #define SYS_fsync	118
 #define SYS_sigreturn	119
 #define SYS_clone	120
@@ -803,6 +785,8 @@ static inline long __syscall6(long n, long a, long b, long c, long d, long e, lo
 #define SYS_syncfs	373
 #define SYS_sendmmsg	374
 #define SYS_setns	375
+#define SYS_process_vm_readv	376
+#define SYS_process_vm_writev	377
 
 /* fixup legacy 16-bit junk */
 #undef SYS_lchown

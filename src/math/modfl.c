@@ -40,7 +40,7 @@
 #if LDBL_MANT_DIG == 53 && LDBL_MAX_EXP == 1024
 long double modfl(long double x, long double *iptr)
 {
-	return modf(x, iptr);
+	return modf(x, (double *)iptr);
 }
 #elif (LDBL_MANT_DIG == 64 || LDBL_MANT_DIG == 113) && LDBL_MAX_EXP == 16384
 
@@ -81,7 +81,7 @@ long double modfl(long double x, long double *iptr)
 		return x - ux.e;
 	} else if (e >= LDBL_MANT_DIG - 1) {    /* x has no fraction part. */
 		*iptr = x;
-		if (e == LDBL_MAX_EXP && (ux.bits.manh|ux.bits.manl)) /* nan */
+		if (e == LDBL_MAX_EXP && ((ux.bits.manh&~LDBL_NBIT)|ux.bits.manl)) /* nan */
 			return x;
 		return zero[ux.bits.sign];
 	} else {                                /* Fraction part is in manl. */

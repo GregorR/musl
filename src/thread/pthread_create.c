@@ -24,33 +24,36 @@ void pthread_exit(void *result)
 
 	__pthread_tsd_run_dtors();
 
-	__lock(&self->exitlock);
+	__lock(self->exitlock);
 
 	/* Mark this thread dead before decrementing count */
-	__lock(&self->killlock);
+	__lock(self->killlock);
 	self->dead = 1;
-	a_store(&self->killlock, 0);
+	__unlock(self->killlock);
 
 	do n = libc.threads_minus_1;
 	while (n && a_cas(&libc.threads_minus_1, n, n-1)!=n);
 	if (!n) exit(0);
 
 	if (self->detached && self->map_base) {
-		__syscall(SYS_rt_sigprocmask, SIG_BLOCK, (uint64_t[]){-1},0,8);
+		if (self->detached == 2)
+			__syscall(SYS_set_tid_address, 0);
+		__syscall(SYS_rt_sigprocmask, SIG_BLOCK,
+			SIGALL_SET, 0, __SYSCALL_SSLEN);
 		__unmapself(self->map_base, self->map_size);
 	}
 
 	__syscall(SYS_exit, 0);
 }
 
-void __do_cleanup_push(struct __ptcb *cb, void (*f)(void *), void *x)
+void __do_cleanup_push(struct __ptcb *cb)
 {
 	struct pthread *self = pthread_self();
 	cb->__next = self->cancelbuf;
 	self->cancelbuf = cb;
 }
 
-void __do_cleanup_pop(struct __ptcb *cb, int run)
+void __do_cleanup_pop(struct __ptcb *cb)
 {
 	__pthread_self()->cancelbuf = cb->__next;
 }
@@ -59,7 +62,8 @@ static int start(void *p)
 {
 	pthread_t self = p;
 	if (self->unblock_cancel)
-		__syscall(SYS_rt_sigprocmask, SIG_UNBLOCK, SIGPT_SET, 0, 8);
+		__syscall(SYS_rt_sigprocmask, SIG_UNBLOCK,
+			SIGPT_SET, 0, __SYSCALL_SSLEN);
 	pthread_exit(self->start(self->start_arg));
 	return 0;
 }
@@ -87,6 +91,7 @@ int pthread_create(pthread_t *res, const pthread_attr_t *attr, void *(*entry)(vo
 	size_t guard = DEFAULT_GUARD_SIZE;
 	struct pthread *self = pthread_self(), *new;
 	unsigned char *map, *stack, *tsd;
+	unsigned flags = 0x7d8f00;
 
 	if (!self) return ENOSYS;
 	if (!libc.threaded) {
@@ -95,20 +100,23 @@ int pthread_create(pthread_t *res, const pthread_attr_t *attr, void *(*entry)(vo
 		init_file_lock(__stdin_used);
 		init_file_lock(__stdout_used);
 		init_file_lock(__stderr_used);
-		__syscall(SYS_rt_sigprocmask, SIG_UNBLOCK, SIGPT_SET, 0, 8);
 		libc.threaded = 1;
 	}
 
-	if (attr) {
-		guard = ROUND(attr->_a_guardsize + DEFAULT_GUARD_SIZE);
-		size = guard + ROUND(attr->_a_stacksize + DEFAULT_STACK_SIZE);
+	if (attr && attr->_a_stackaddr) {
+		map = 0;
+		tsd = (void *)(attr->_a_stackaddr-__pthread_tsd_size & -16);
+	} else {
+		if (attr) {
+			guard = ROUND(attr->_a_guardsize + DEFAULT_GUARD_SIZE);
+			size = guard + ROUND(attr->_a_stacksize + DEFAULT_STACK_SIZE);
+		}
+		size += __pthread_tsd_size;
+		map = mmap(0, size, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANON, -1, 0);
+		if (map == MAP_FAILED) return EAGAIN;
+		if (guard) mprotect(map, guard, PROT_NONE);
+		tsd = map + size - __pthread_tsd_size;
 	}
-	size += __pthread_tsd_size;
-	map = mmap(0, size, PROT_READ|PROT_WRITE|PROT_EXEC, MAP_PRIVATE|MAP_ANON, -1, 0);
-	if (map == MAP_FAILED) return EAGAIN;
-	if (guard) mprotect(map, guard, PROT_NONE);
-
-	tsd = map + size - __pthread_tsd_size;
 	new = (void *)(tsd - sizeof *new - PAGE_SIZE%sizeof *new);
 	new->map_base = map;
 	new->map_size = size;
@@ -118,14 +126,18 @@ int pthread_create(pthread_t *res, const pthread_attr_t *attr, void *(*entry)(vo
 	new->start_arg = arg;
 	new->self = new;
 	new->tsd = (void *)tsd;
-	if (attr) new->detached = attr->_a_detach;
+	if (attr && attr->_a_detach) {
+		new->detached = 1;
+		flags -= 0x200000;
+	}
 	new->unblock_cancel = self->cancel;
+	new->canary = self->canary ^ (uintptr_t)&new;
 	stack = (void *)new;
 
 	__synccall_lock();
 
 	a_inc(&libc.threads_minus_1);
-	ret = __clone(start, stack, 0x7d8f00, new, &new->tid, new, &new->tid);
+	ret = __clone(start, stack, flags, new, &new->tid, new, &new->tid);
 
 	__synccall_unlock();
 
