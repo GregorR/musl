@@ -7,6 +7,7 @@
 #include <limits.h>
 #include "__dirent.h"
 
+#ifndef __MICROCOSM__
 DIR *fdopendir(int fd)
 {
 	DIR *dir;
@@ -27,3 +28,4 @@ DIR *fdopendir(int fd)
 	dir->fd = fd;
 	return dir;
 }
+#endif

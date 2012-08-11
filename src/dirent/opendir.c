@@ -9,6 +9,7 @@
 #include "__dirent.h"
 #include "syscall.h"
 
+#ifndef __MICROCOSM__
 DIR *opendir(const char *name)
 {
 	int fd;
@@ -23,3 +24,4 @@ DIR *opendir(const char *name)
 	dir->fd = fd;
 	return dir;
 }
+#endif

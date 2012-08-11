@@ -5,6 +5,7 @@
 #include "__dirent.h"
 #include "libc.h"
 
+#ifndef __MICROCOSM__
 int readdir_r(DIR *dir, struct dirent *buf, struct dirent **result)
 {
 	struct dirent *de;
@@ -28,3 +29,4 @@ int readdir_r(DIR *dir, struct dirent *buf, struct dirent **result)
 }
 
 LFS64_2(readdir_r, readdir64_r);
+#endif

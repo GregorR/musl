@@ -8,6 +8,7 @@
 #include "syscall.h"
 #include "libc.h"
 
+#ifndef __MICROCOSM__
 int __getdents(int, struct dirent *, size_t);
 
 struct dirent *readdir(DIR *dir)
@@ -27,3 +28,4 @@ struct dirent *readdir(DIR *dir)
 }
 
 LFS64(readdir);
+#endif

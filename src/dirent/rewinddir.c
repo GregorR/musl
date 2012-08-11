@@ -3,6 +3,7 @@
 #include "__dirent.h"
 #include "libc.h"
 
+#ifndef __MICROCOSM__
 void rewinddir(DIR *dir)
 {
 	LOCK(dir->lock);
@@ -11,3 +12,4 @@ void rewinddir(DIR *dir)
 	dir->tell = 0;
 	UNLOCK(dir->lock);
 }
+#endif

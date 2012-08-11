@@ -3,6 +3,7 @@
 #include "__dirent.h"
 #include "libc.h"
 
+#ifndef __MICROCOSM__
 void seekdir(DIR *dir, long off)
 {
 	LOCK(dir->lock);
@@ -10,3 +11,4 @@ void seekdir(DIR *dir, long off)
 	dir->buf_pos = dir->buf_end = 0;
 	UNLOCK(dir->lock);
 }
+#endif
