@@ -50,6 +50,8 @@ ALL_TOOLS = tools/musl-gcc
 
 LDSO_PATHNAME = $(syslibdir)/ld-musl-$(ARCH).so.1
 
+INSTALL = install
+
 -include config.mak
 
 all: $(ALL_LIBS) $(ALL_TOOLS)
@@ -117,22 +119,22 @@ tools/musl-gcc: config.mak
 	chmod +x $@
 
 $(DESTDIR)$(bindir)/%: tools/%
-	install -D $< $@
+	$(INSTALL) -D $< $@
 
 $(DESTDIR)$(libdir)/%.so: lib/%.so
-	install -D -m 755 $< $@
+	$(INSTALL) -D -m 755 $< $@
 
 $(DESTDIR)$(libdir)/%: lib/%
-	install -D -m 644 $< $@
+	$(INSTALL) -D -m 644 $< $@
 
 $(DESTDIR)$(includedir)/%: include/%
-	install -D -m 644 $< $@
+	$(INSTALL) -D -m 644 $< $@
 
 $(DESTDIR)$(LDSO_PATHNAME): $(DESTDIR)$(syslibdir)
 	ln -sf $(libdir)/libc.so $@ || true
 
 $(DESTDIR)$(syslibdir):
-	install -d -m 755 $(DESTDIR)$(syslibdir)
+	$(INSTALL) -d -m 755 $(DESTDIR)$(syslibdir)
 
 .PRECIOUS: $(CRT_LIBS:lib/%=crt/%)
 
