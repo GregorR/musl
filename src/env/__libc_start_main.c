@@ -12,7 +12,9 @@ int __libc_start_main(
 	__environ = envp;
 	do auxv++; while (*auxv);
 	libc.auxv = (void *)++auxv;
+#ifndef __MICROCOSM__
 	libc.ldso_fini = ldso_fini;
+#endif
 	libc.fini = fini;
 
 	__init_security((void *)auxv);

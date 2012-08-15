@@ -11,7 +11,9 @@ struct __libc {
 	size_t *auxv;
 	int (*atexit)(void (*)(void));
 	void (*fini)(void);
+#ifndef __MICROCOSM__ /* we don't use musl's ld.so */
 	void (*ldso_fini)(void);
+#endif
 	volatile int threads_minus_1;
 	int canceldisable;
 	FILE *ofl_head;

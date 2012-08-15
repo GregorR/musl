@@ -21,13 +21,13 @@ void exit(int code)
 	/* If more than one thread calls exit, hang until _Exit ends it all */
 	while (a_swap(&lock, 1)) __syscall(SYS_pause);
 
-#ifndef __MICROCOSM__ /* FIXME: these should work */
 	__funcs_on_exit();
 	if (libc.fini) libc.fini();
+#ifndef __MICROCOSM__
 	if (libc.ldso_fini) libc.ldso_fini();
+#endif
 	__flush_on_exit();
 	__seek_on_exit();
-#endif
 
 	_Exit(code);
 	for(;;);
