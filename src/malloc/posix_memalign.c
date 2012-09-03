@@ -1,4 +1,4 @@
-#ifndef __MICROCOSM__
+#ifndef __MICROCOSM__ /* do not use this posix_memalign on Microcosm */
 #include <stdlib.h>
 #include <stdint.h>
 #include <errno.h>

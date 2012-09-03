@@ -1,4 +1,4 @@
-#ifndef __MICROCOSM__ /* use host malloc on microcosm */
+#ifndef __MICROCOSM__ /* do not use this malloc on Microcosm */
 #define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
